@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>rampaste — pastebin RAM</title>
+<style>
+  :root {
+    --bg: #0e1116; --card: #161b23; --line: #262d38; --fg: #e6e9ef;
+    --dim: #8b95a5; --acc: #4ade80; --acc2: #60a5fa; --warn: #fbbf24;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    padding: 24px 16px 64px;
+  }
+  main { max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0; font-family: var(--mono); letter-spacing: -0.5px; }
+  h1 span { color: var(--acc); }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin: 28px 0 10px; font-weight: 600; }
+  p.sub { color: var(--dim); margin: 6px 0 0; font-size: 13px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .badge {
+    background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+    padding: 4px 11px; font-size: 12px; color: var(--dim); font-family: var(--mono);
+  }
+  .badge b { color: var(--fg); font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  textarea {
+    width: 100%; min-height: 190px; resize: vertical; background: #0b0e13; color: var(--fg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 12px; font: 13px/1.6 var(--mono);
+  }
+  textarea:focus, select:focus { outline: 1px solid var(--acc2); border-color: var(--acc2); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  select {
+    background: #0b0e13; color: var(--fg); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 10px; font-size: 13px;
+  }
+  label.chk { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--dim); cursor: pointer; }
+  button {
+    background: var(--acc); color: #06210f; border: 0; border-radius: 8px;
+    padding: 9px 16px; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.08); }
+  button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); font-weight: 600; }
+  button.danger { background: transparent; color: #f87171; border: 1px solid #47262b; font-weight: 600; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .grow { flex: 1; }
+  .meta { color: var(--dim); font-size: 12px; font-family: var(--mono); }
+  pre.content {
+    background: #0b0e13; border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px; overflow: auto; max-height: 60vh; margin: 12px 0 0;
+    font: 13px/1.6 var(--mono); white-space: pre-wrap; word-break: break-word;
+  }
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  ul.list li {
+    display: flex; gap: 10px; align-items: center; padding: 9px 12px;
+    border-bottom: 1px solid var(--line); font-size: 13px;
+  }
+  ul.list li:last-child { border-bottom: 0; }
+  ul.list a { color: var(--acc2); text-decoration: none; font-family: var(--mono); }
+  ul.list a:hover { text-decoration: underline; }
+  .prev { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .empty { color: var(--dim); font-size: 13px; padding: 10px 0; }
+  .msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+  .msg.err { color: #f87171; }
+  .msg.ok { color: var(--acc); }
+  .linkbox {
+    display: flex; gap: 8px; align-items: center; margin-top: 12px;
+    background: #0b0e13; border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px;
+  }
+  .linkbox input { flex: 1; background: 0; border: 0; color: var(--acc2); font: 13px var(--mono); }
+  .linkbox input:focus { outline: 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>ram<span>paste</span></h1>
+    <p class="sub">Pastebin tanpa database — semua isi disimpan di RAM dan dihapus serentak tiap jam.</p>
+    <div class="badges">
+      <span class="badge">paste aktif: <b id="b-items">–</b></span>
+      <span class="badge">RAM: <b id="b-bytes">–</b></span>
+      <span class="badge">wipe berikutnya: <b id="b-wipe">–</b></span>
+    </div>
+  </header>
+
+  <!-- MODE LIHAT -->
+  <section id="view" hidden>
+    <h2>Paste</h2>
+    <div class="card">
+      <div class="row">
+        <span class="meta" id="v-id"></span>
+        <span class="meta" id="v-lang"></span>
+        <span class="meta" id="v-views"></span>
+        <span class="meta" id="v-exp"></span>
+        <span class="grow"></span>
+        <button class="ghost" id="v-copy">Copy</button>
+        <a id="v-raw" class="meta" style="color:var(--acc2)" target="_blank" rel="noreferrer">raw</a>
+        <button class="danger" id="v-del" hidden>Hapus</button>
+      </div>
+      <pre class="content" id="v-content"></pre>
+    </div>
+    <div class="row"><a class="meta" style="color:var(--acc2)" href="/">← bikin paste baru</a></div>
+  </section>
+
+  <!-- MODE BUAT -->
+  <section id="compose">
+    <h2>Paste baru</h2>
+    <div class="card">
+      <textarea id="content" placeholder="tempel teks/kode di sini..."></textarea>
+      <div class="row">
+        <select id="lang">
+          <option value="text">plain text</option>
+          <option value="javascript">javascript</option>
+          <option value="json">json</option>
+          <option value="html">html</option>
+          <option value="css">css</option>
+          <option value="python">python</option>
+          <option value="bash">bash</option>
+          <option value="sql">sql</option>
+          <option value="markdown">markdown</option>
+          <option value="yaml">yaml</option>
+          <option value="go">go</option>
+          <option value="php">php</option>
+        </select>
+        <select id="ttl">
+          <option value="0">sampai wipe berikutnya</option>
+          <option value="600">10 menit</option>
+          <option value="1800">30 menit</option>
+          <option value="3600">1 jam</option>
+        </select>
+        <label class="chk"><input type="checkbox" id="burn" /> sekali baca</label>
+        <label class="chk"><input type="checkbox" id="unlisted" /> jangan tampil di daftar</label>
+        <span class="grow"></span>
+        <button id="save">Simpan</button>
+      </div>
+      <div class="msg" id="msg"></div>
+      <div id="result" hidden>
+        <div class="linkbox">
+          <input id="result-url" readonly />
+          <button class="ghost" id="result-copy">Copy link</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="mine-wrap">
+    <h2>Paste saya (browser ini)</h2>
+    <div class="card"><ul class="list" id="mine"></ul></div>
+  </section>
+
+  <section>
+    <h2>Paste publik terbaru</h2>
+    <div class="card"><ul class="list" id="recent"></ul></div>
+  </section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const HOUR = 3600000;
+
+async function call(url, opt) {
+  const res = await fetch(url, opt);
+  const ct = res.headers.get('content-type') || '';
+  const body = ct.includes('json') ? await res.json() : await res.text();
+  if (!res.ok) throw new Error((body && body.error) || res.statusText);
+  return body;
+}
+
+const fmtBytes = (n) => (n < 1024 ? n + ' B' : (n / 1024).toFixed(1) + ' KB');
+const fmtClock = (ts) => new Date(ts).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+function fmtLeft(ms) {
+  if (ms <= 0) return 'habis';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return s + ' detik';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + ' menit';
+  return Math.floor(m / 60) + ' jam ' + (m % 60) + ' menit';
+}
+
+/* ---------- localStorage: paste milik browser ini ---------- */
+const MINE_KEY = 'rampaste.mine';
+const loadMine = () => {
+  try { return JSON.parse(localStorage.getItem(MINE_KEY) || '[]'); } catch { return []; }
+};
+const saveMine = (arr) => {
+  localStorage.setItem(MINE_KEY, JSON.stringify(arr.slice(0, 50)));
+};
+
+/* ---------- badges ---------- */
+let nextWipe = 0;
+async function refreshStats() {
+  try {
+    const s = await call('/api/stats');
+    nextWipe = s.nextWipeAt;
+    $('#b-items').textContent = s.items;
+    $('#b-bytes').textContent = fmtBytes(s.bytes) + ' / ' + fmtBytes(s.maxBytes);
+    renderWipe();
+  } catch (e) { $('#b-wipe').textContent = 'n/a'; }
+}
+function renderWipe() {
+  const left = nextWipe - Date.now();
+  $('#b-wipe').textContent = left > 0 ? fmtLeft(left) + ' (' + fmtClock(nextWipe) + ')' : 'sekarang';
+}
+
+/* ---------- daftar publik ---------- */
+async function refreshRecent() {
+  try {
+    const { items } = await call('/api/list');
+    const ul = $('#recent');
+    ul.innerHTML = '';
+    if (!items.length) {
+      ul.innerHTML = '<li class="empty">belum ada paste. RAM masih bersih.</li>';
+      return;
+    }
+    for (const it of items) {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = '/?p=' + it.id;
+      a.textContent = it.id;
+      const prev = document.createElement('span');
+      prev.className = 'prev';
+      prev.textContent = it.preview || '(kosong)';
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = it.lang + (it.burn ? ' · sekali baca' : '') + ' · ' + fmtBytes(it.bytes) + ' · ' + fmtClock(it.createdAt);
+      li.append(a, prev, meta);
+      ul.append(li);
+    }
+  } catch { /* diamkan */ }
+}
+
+/* ---------- paste saya ---------- */
+function renderMine() {
+  const ul = $('#mine');
+  ul.innerHTML = '';
+  const mine = loadMine();
+  if (!mine.length) {
+    ul.innerHTML = '<li class="empty">belum ada. Paste yang kamu buat di browser ini akan muncul di sini beserta link hapusnya.</li>';
+    return;
+  }
+  for (const item of mine) {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = '/?p=' + item.id;
+    a.textContent = item.id;
+    const meta = document.createElement('span');
+    meta.className = 'meta grow';
+    meta.textContent = item.unlisted ? 'unlisted · ' + fmtClock(item.createdAt) : fmtClock(item.createdAt);
+    const del = document.createElement('button');
+    del.className = 'danger';
+    del.textContent = 'Hapus';
+    del.onclick = async () => {
+      try {
+        await call('/api/paste/' + item.id, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleteToken: item.deleteToken }),
+        });
+      } catch { /* mungkin sudah kena wipe */ }
+      saveMine(loadMine().filter((x) => x.id !== item.id));
+      renderMine();
+      refreshStats();
+      refreshRecent();
+    };
+    li.append(a, meta, del);
+    ul.append(li);
+  }
+}
+
+/* ---------- simpan ---------- */
+$('#save').onclick = async () => {
+  const btn = $('#save');
+  const msg = $('#msg');
+  const content = $('#content').value;
+  if (!content.trim()) {
+    msg.className = 'msg err';
+    msg.textContent = 'Isi dulu teksnya.';
+    return;
+  }
+  btn.disabled = true;
+  msg.className = 'msg';
+  msg.textContent = 'menyimpan...';
+  try {
+    const out = await call('/api/paste', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content,
+        lang: $('#lang').value,
+        ttl: Number($('#ttl').value) || undefined,
+        burn: $('#burn').checked,
+        unlisted: $('#unlisted').checked,
+      }),
+    });
+    msg.className = 'msg ok';
+    msg.textContent = 'Tersimpan. Hilang otomatis paling lambat ' + fmtClock(out.expiresAt) + '.';
+    const url = location.origin + '/?p=' + out.id;
+    $('#result-url').value = url;
+    $('#result').hidden = false;
+    const mine = loadMine().filter((x) => x.id !== out.id);
+    mine.unshift({ id: out.id, deleteToken: out.deleteToken, createdAt: out.createdAt, unlisted: !!$('#unlisted').checked });
+    saveMine(mine);
+    renderMine();
+    refreshStats();
+    refreshRecent();
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+$('#result-copy').onclick = async () => {
+  const box = $('#result-url');
+  box.select();
+  try { await navigator.clipboard.writeText(box.value); $('#result-copy').textContent = 'Tersalin!'; }
+  catch { document.execCommand('copy'); $('#result-copy').textContent = 'Tersalin!'; }
+  setTimeout(() => ($('#result-copy').textContent = 'Copy link'), 1500);
+};
+
+/* ---------- mode lihat ---------- */
+async function showView(id) {
+  $('#compose').hidden = true;
+  $('#mine-wrap').hidden = true;
+  $('#view').hidden = false;
+  const mine = loadMine().find((x) => x.id === id);
+  $('#v-raw').href = '/api/paste/' + id + '/raw';
+  try {
+    const p = await call('/api/paste/' + id);
+    $('#v-id').textContent = 'id: ' + p.id + (p.burned ? ' · TERBAKAR' : '');
+    $('#v-lang').textContent = 'lang: ' + p.lang;
+    $('#v-views').textContent = 'views: ' + p.views;
+    $('#v-exp').textContent = 'hilang: ' + fmtClock(p.expiresAt) + ' (' + fmtLeft(p.expiresAt - Date.now()) + ')';
+    $('#v-content').textContent = p.content;
+    if (mine) {
+      $('#v-del').hidden = false;
+      $('#v-del').onclick = async () => {
+        try {
+          await call('/api/paste/' + id, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deleteToken: mine.deleteToken }),
+          });
+          $('#v-content').textContent = 'Paste sudah dihapus.';
+        } catch (e) {
+          $('#v-content').textContent = e.message;
+        }
+        $('#v-del').hidden = true;
+        saveMine(loadMine().filter((x) => x.id !== id));
+        refreshStats();
+      };
+    }
+  } catch (e) {
+    $('#v-content').textContent = e.message;
+  }
+  $('#v-copy').onclick = async () => {
+    try { await navigator.clipboard.writeText($('#v-content').textContent); $('#v-copy').textContent = 'Tersalin!'; }
+    catch { $('#v-copy').textContent = 'gagal copy'; }
+    setTimeout(() => ($('#v-copy').textContent = 'Copy'), 1500);
+  };
+  refreshStats();
+}
+
+/* ---------- start ---------- */
+const viewId = new URLSearchParams(location.search).get('p');
+if (viewId) {
+  showView(viewId);
+} else {
+  renderMine();
+  refreshRecent();
+  refreshStats();
+  setInterval(refreshStats, 15000);
+  setInterval(refreshRecent, 20000);
+  $('#content').focus();
+}
+setInterval(renderWipe, 1000);
+</script>
+</body>
+</html>
